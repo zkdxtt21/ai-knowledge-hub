@@ -3,7 +3,6 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
 
-from app.models import init_db
 from app.routes.articles import router as articles_router
 from app.routes.pages import router as pages_router
 
@@ -21,4 +20,4 @@ app.include_router(pages_router)
 
 @app.on_event("startup")
 def on_startup():
-    init_db()
+    Path("content").mkdir(exist_ok=True)
