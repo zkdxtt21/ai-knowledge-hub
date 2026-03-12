@@ -44,3 +44,10 @@ def edit_article(slug: str, request: Request, db: Session = Depends(get_db)):
     if not article:
         raise HTTPException(status_code=404, detail="Article not found.")
     return templates.TemplateResponse("editor.html", {"request": request, "article": article})
+
+
+@router.get("/tags/{tag}", response_class=HTMLResponse)
+def tag_page(tag: str, request: Request, db: Session = Depends(get_db)):
+    all_articles = db.query(Article).order_by(Article.updated_at.desc()).all()
+    articles = [a for a in all_articles if tag.lower() in [t.strip().lower() for t in a.tags.split(",") if t.strip()]]
+    return templates.TemplateResponse("tag.html", {"request": request, "tag": tag, "articles": articles})
