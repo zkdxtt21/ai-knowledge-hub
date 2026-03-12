@@ -4,7 +4,7 @@ summary: A real example of using Claude Code to scaffold, code, and deploy a ful
   web app from scratch in one conversation.
 tags: Claude, AI Coding, FastAPI, Python, Case Study
 title: Building an AI Knowledge Hub with Claude Code
-updated_at: 2026-03-12 12:02:42.566890+00:00
+updated_at: 2026-03-12 12:12:52.361610+00:00
 ---
 
 # Building an AI Knowledge Hub with Claude Code
@@ -141,3 +141,25 @@ After migrating the storage layer, the website returned a 500 error. The root ca
 - **What if someone edits the `.md` file directly on GitHub?** The app picks up the changes immediately — no restart needed, since files are read on every request. This means GitHub itself becomes an editing interface.
 - **Should article deletion also delete the git history?** Deleting via the UI removes the file, but the git history preserves it. This is actually a feature — deleted articles can be recovered via `git checkout`.
 - **What happens with concurrent edits?** If two people edit the same article at the same time (one via the UI, one via GitHub), a git conflict could occur. For a personal knowledge base this is unlikely, but worth keeping in mind as the project grows.
+
+---
+
+## Improvement: CLAUDE.md for Future Sessions
+
+As the project grew, it became useful to leave a persistent note for future Claude Code sessions — so the AI doesn't have to re-discover the architecture every time.
+
+### What Changed
+
+A `CLAUDE.md` file was added to the repo root. Claude Code automatically reads this file at the start of every session when opened in the project directory.
+
+### What It Contains
+
+- How to install dependencies and start the dev server (including the internal PyPI workaround)
+- A summary of the file-based storage architecture (`app/storage.py`) — the biggest non-obvious thing in the codebase
+- The article file format (YAML frontmatter + Markdown body)
+- Key behaviours: slug = filename, in-memory tag filtering, server-side markdown preview endpoint
+
+### Follow-Up Questions
+
+- **What else belongs in CLAUDE.md?** Good candidates: common mistakes to avoid, decisions that were intentionally made a certain way, or links to external resources the AI would otherwise have to search for.
+- **Should CLAUDE.md be updated as the project evolves?** Yes — treat it like living documentation. When a significant architectural decision is made, add a note explaining *why*, not just *what*.
