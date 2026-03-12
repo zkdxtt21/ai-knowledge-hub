@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block title %}{{ article.title }} — AI Knowledge Hub{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+  <a href="/" class="text-sm text-indigo-600 hover:underline">← Back to all articles</a>
+</div>
+
+<article class="bg-white border border-gray-200 rounded-xl p-8">
+  <header class="mb-8 pb-6 border-b border-gray-100">
+    <h1 class="text-3xl font-bold text-gray-900">{{ article.title }}</h1>
+    {% if article.summary %}
+    <p class="text-gray-500 mt-3 text-lg">{{ article.summary }}</p>
+    {% endif %}
+    <div class="flex items-center gap-4 mt-4">
+      <span class="text-sm text-gray-400">Updated {{ article.updated_at.strftime("%B %d, %Y") }}</span>
+      {% if tags %}
+      <div class="flex flex-wrap gap-2">
+        {% for tag in tags %}
+        <span class="bg-indigo-50 text-indigo-700 text-xs px-2 py-0.5 rounded-full font-medium">{{ tag }}</span>
+        {% endfor %}
+      </div>
+      {% endif %}
+      <a href="/edit/{{ article.slug }}" class="ml-auto text-sm text-gray-400 hover:text-indigo-600 transition">Edit</a>
+    </div>
+  </header>
+
+  <div class="prose">
+    {{ html_content | safe }}
+  </div>
+</article>
+{% endblock %}

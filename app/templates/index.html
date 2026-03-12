@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block title %}AI Knowledge Hub{% endblock %}
+
+{% block content %}
+<div class="mb-8">
+  <h1 class="text-3xl font-bold text-gray-900">Knowledge Base</h1>
+  <p class="text-gray-500 mt-1">A curated collection of AI insights, notes, and guides.</p>
+</div>
+
+{% if articles %}
+<div class="grid gap-4">
+  {% for article in articles %}
+  <a href="/articles/{{ article.slug }}" class="block bg-white border border-gray-200 rounded-xl p-6 hover:border-indigo-400 hover:shadow-sm transition group">
+    <div class="flex items-start justify-between">
+      <div class="flex-1">
+        <h2 class="text-lg font-semibold text-gray-900 group-hover:text-indigo-600 transition">{{ article.title }}</h2>
+        {% if article.summary %}
+        <p class="text-gray-500 mt-1 text-sm">{{ article.summary }}</p>
+        {% endif %}
+        {% if article.tags %}
+        <div class="flex flex-wrap gap-2 mt-3">
+          {% for tag in article.tags.split(",") %}
+          {% set tag = tag.strip() %}
+          {% if tag %}
+          <span class="bg-indigo-50 text-indigo-700 text-xs px-2 py-0.5 rounded-full font-medium">{{ tag }}</span>
+          {% endif %}
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+      <span class="text-gray-300 text-sm ml-4 whitespace-nowrap">{{ article.updated_at.strftime("%b %d, %Y") }}</span>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="text-center py-24 text-gray-400">
+  <p class="text-5xl mb-4">📝</p>
+  <p class="text-lg font-medium">No articles yet.</p>
+  <p class="text-sm mt-1">Click <a href="/new" class="text-indigo-600 underline">New Article</a> to get started.</p>
+</div>
+{% endif %}
+{% endblock %}
