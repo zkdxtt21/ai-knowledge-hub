@@ -64,12 +64,8 @@ Slash commands are shortcuts you type directly in the Claude Code prompt. Here a
 | `/help` | Show all available commands and keyboard shortcuts |
 | `/clear` | Clear the current conversation context (start fresh) |
 | `/compact` | Summarize the conversation to reclaim context window space |
-| `/review` | Ask Claude to do a code review of recent changes |
-| `/commit` | Generate a git commit message and commit staged changes |
 | `/memory` | Open the memory file for the current project |
 | `/init` | Initialize Claude Code in a new project (creates `CLAUDE.md`) |
-| `/doctor` | Check your Claude Code installation for issues |
-| `/fast` | Toggle fast mode (optimized for speed) |
 
 ---
 
@@ -77,10 +73,13 @@ Slash commands are shortcuts you type directly in the Claude Code prompt. Here a
 
 `CLAUDE.md` is a Markdown file that Claude reads at the start of every session. It's how you give Claude standing instructions that persist across conversations, without having to re-explain things each time.
 
-**Two levels:**
+**Where CLAUDE.md files live:**
 
-- `~/.claude/CLAUDE.md` — global, applies to every project on your machine
-- `<project-root>/CLAUDE.md` — project-specific, checked into git so your whole team shares it
+| Scope | Location | Shared with |
+|---|---|---|
+| **Managed policy** | macOS: `/Library/Application Support/ClaudeCode/CLAUDE.md` | All users in the org (admin-controlled, cannot be excluded) |
+| **User** | `~/.claude/CLAUDE.md` | Just you, across all projects |
+| **Project** | `./CLAUDE.md` or `./.claude/CLAUDE.md` | Team members via source control |
 
 **What to put in CLAUDE.md:**
 
@@ -94,17 +93,13 @@ The more specific your `CLAUDE.md`, the less you need to repeat yourself. Think 
 
 ### Which CLAUDE.md files get read — and where should you launch?
 
-Claude Code reads CLAUDE.md files in this order:
-
-1. `~/.claude/CLAUDE.md` — always read, regardless of where you launch
-2. The directory where you run `claude` (your project root)
-3. All **parent directories** up the tree — it walks upward and reads any CLAUDE.md it finds
-4. **Subdirectories** it explores during the session
+Claude Code reads CLAUDE.md files by walking **up** the directory tree from your current working directory. All CLAUDE.md files in parent directories are loaded in full at launch. CLAUDE.md files in subdirectories load on demand as Claude reads files in those directories.
 
 So launching from `~/projects/myapp/` would load:
 
-- `~/.claude/CLAUDE.md`
-- `~/projects/myapp/CLAUDE.md`
+- `/Library/Application Support/ClaudeCode/CLAUDE.md` (managed policy, if it exists — macOS)
+- `~/.claude/CLAUDE.md` (user-level, always loaded)
+- `~/projects/myapp/CLAUDE.md` (or `.claude/CLAUDE.md`)
 - `~/projects/CLAUDE.md` (if it exists)
 - `~/CLAUDE.md` (if it exists)
 
@@ -169,7 +164,7 @@ The `description` field is the most important part — Claude uses it to decide 
 | Project | `.claude/skills/<name>/SKILL.md` | This project only |
 | Enterprise | Managed settings | All org users |
 
-When names conflict, personal takes precedence over project.
+When names conflict, enterprise takes precedence over personal, and personal takes precedence over project.
 
 ### Invoking skills
 
@@ -276,16 +271,6 @@ Or use the interactive UI: run `/plugin`, go to **Discover**, select a plugin, a
 
 After installing, run `/reload-plugins` to activate without restarting. Plugin skills are namespaced, so `commit-commands` shows up as `/commit-commands:commit`.
 
-**Adding third-party marketplaces:**
-
-The demo marketplace from Anthropic's GitHub has additional example plugins:
-
-```shell
-/plugin marketplace add anthropics/claude-code
-```
-
-Any GitHub repo, Git URL, or local path can be a marketplace — useful for sharing team-specific skills across projects.
-
 > Only install plugins from sources you trust. Plugins can execute arbitrary code on your machine.
 
 ---
@@ -350,18 +335,13 @@ Claude decides when to call the MCP server and does it invisibly. You don't need
 
 ## Memory — Remembering Across Sessions
 
-Claude Code has a file-based memory system stored in `~/.claude/projects/<project>/memory/`. This is separate from `CLAUDE.md` — it's for things Claude *learns* during conversations that should persist.
+Claude Code has a file-based auto memory system stored in `~/.claude/projects/<project>/memory/`. This is separate from `CLAUDE.md` — it's knowledge Claude *accumulates* during conversations without you writing anything.
 
-**Types of memory:**
-
-- **User** — your role, expertise, preferences (e.g. "senior Go engineer, new to React")
-- **Feedback** — corrections and rules Claude should apply going forward (e.g. "don't use mocks in tests")
-- **Project** — ongoing work, decisions, deadlines (e.g. "merge freeze starts Thursday")
-- **Reference** — where to find things in external systems (e.g. "bugs tracked in Linear project INGEST")
+Claude saves notes for itself as it works: build commands, debugging insights, architecture notes, code style preferences, and workflow habits. It doesn't save something every session — it decides what's worth remembering based on whether the information would be useful in a future conversation.
 
 ### Do you need to maintain it?
 
-Mostly no — Claude writes memories automatically during conversations when it learns something worth keeping. Zero maintenance required to get value from it.
+Mostly no — Claude writes memories automatically. Zero maintenance required to get value from it.
 
 - **Auto-written**: Claude decides on its own when something is worth saving — e.g. if you say "always use f-strings", it saves that without you asking
 - **Manually triggered**: Say "remember that..." to force a save on something specific
@@ -378,9 +358,9 @@ Hooks are shell commands that Claude Code runs automatically when certain events
 
 **Common hook triggers:**
 
-- `pre-tool-call` — before Claude calls a tool (useful for logging or approval gates)
-- `post-tool-call` — after a tool completes (useful for auto-formatting or running linters)
-- `on-submit` — when you submit a prompt
+- `PreToolUse` — before Claude calls a tool (useful for logging or approval gates)
+- `PostToolUse` — after a tool completes (useful for auto-formatting or running linters)
+- `UserPromptSubmit` — when you submit a prompt
 
 Hooks let you enforce team rules automatically — for example, running `black` after every file write, or blocking certain shell commands entirely.
 
@@ -389,10 +369,15 @@ Hooks let you enforce team rules automatically — for example, running `black` 
 ```json
 {
   "hooks": {
-    "post-tool-call": [
+    "PostToolUse": [
       {
         "matcher": "Edit|Write",
-        "command": "black $CLAUDE_TOOL_RESULT_PATH 2>/dev/null || true"
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.file_path' | xargs black 2>/dev/null || true"
+          }
+        ]
       }
     ]
   }
@@ -413,12 +398,12 @@ The `permissions` key has two lists:
 {
   "permissions": {
     "allow": [
-      "Bash(git log:*)",
-      "Bash(npm run test:*)"
+      "Bash(git log *)",
+      "Bash(npm run test *)"
     ],
     "deny": [
-      "Bash(rm:*)",
-      "Bash(git push --force:*)"
+      "Bash(rm *)",
+      "Bash(git push --force *)"
     ]
   }
 }
@@ -431,9 +416,9 @@ The `permissions` key has two lists:
 
 | Pattern | What it allows/blocks |
 |---|---|
-| `Bash(git log:*)` | Any `git log` command |
-| `Bash(npm run test:*)` | Any `npm run test` variant |
-| `Bash(rm:*)` | Any `rm` command |
+| `Bash(git log *)` | Any `git log` command |
+| `Bash(npm run test *)` | Any `npm run test` variant |
+| `Bash(rm *)` | Any `rm` command |
 | `Read` | All file reads |
 | `Edit` | All file edits |
 | `mcp__github__*` | All tools from the GitHub MCP server |
@@ -455,8 +440,8 @@ A few that save time in the CLI:
 
 | Shortcut | Action |
 |---|---|
-| `Escape` | Cancel current generation |
-| `Ctrl+C` | Hard stop (exits Claude) |
+| `Ctrl+C` | Cancel current input or generation |
+| `Ctrl+D` | Exit Claude Code session |
 | `Up arrow` | Recall previous prompt |
 | `Ctrl+L` | Clear screen |
 | `Shift+Enter` | Newline in prompt (without submitting) |
