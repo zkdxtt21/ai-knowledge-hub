@@ -119,50 +119,174 @@ claude
 
 ## Skills
 
-Skills are **model-invoked** capabilities — Claude decides when to use them based on context, rather than you calling them explicitly. They're defined with a `SKILL.md` file and bundled inside a **plugin**.
+Skills extend what Claude can do. Each skill is a `SKILL.md` file with instructions — Claude follows them when the skill is invoked, either automatically when relevant or manually via `/skill-name`.
 
-### Installing plugins
+> Skills replaced the older `.claude/commands/` system. Existing command files still work, but skills are recommended — they support supporting files, subagent execution, and finer invocation control.
 
-Plugins are installed via the CLI:
+### Bundled skills
 
-```bash
-claude plugins install <plugin-name>
+These ship with Claude Code and are available in every session:
+
+| Command | What it does |
+|---|---|
+| `/simplify` | Reviews recently changed files for code reuse, quality, and efficiency issues, then fixes them. Spawns three parallel review agents. |
+| `/batch <instruction>` | Decomposes large-scale changes into independent units, runs one background agent per unit in an isolated git worktree, then opens PRs. Useful for mass migrations. |
+| `/debug [description]` | Troubleshoots your current Claude Code session by reading the session debug log. |
+| `/loop [interval] <prompt>` | Runs a prompt repeatedly on an interval while the session stays open. E.g. `/loop 5m check if the deploy finished`. |
+| `/claude-api` | Loads Claude API and Agent SDK reference material into context. Also activates automatically when your code imports `anthropic`. |
+
+### Creating your own skill
+
+Skills live in a directory named after the skill, with `SKILL.md` as the entrypoint:
+
+```
+~/.claude/skills/my-skill/
+└── SKILL.md
 ```
 
-Installed plugins are available globally across all your projects. Some plugins are scoped to a specific project when installed from within that project's directory. You can browse available plugins from the official marketplace or install from a local path.
-
-### Where do SKILL.md files live?
-
-Skills are not per-project. They live inside a plugin directory, which is installed globally (or scoped to a specific project). The structure looks like this:
-
-```
-my-plugin/
-├── .claude-plugin/
-│   └── plugin.json       # Plugin metadata
-├── commands/
-│   └── my-command.md     # A slash command (user-invoked)
-└── skills/
-    ├── skill-one/
-    │   └── SKILL.md      # One skill
-    └── skill-two/
-        └── SKILL.md      # Another skill
-```
-
-Yes — a single plugin can contain **multiple skills**, each in its own subdirectory under `skills/`.
-
-### How does Claude know when to use a skill?
-
-The `description` field in the skill's frontmatter acts as the trigger. You write it as a natural-language condition:
+A minimal `SKILL.md`:
 
 ```yaml
 ---
-name: python-style
-description: This skill should be used when the user asks to write or review Python code, or mentions PEP8, type hints, or code style.
-version: 1.0.0
+name: explain-code
+description: Explains code with visual diagrams and analogies. Use when explaining how code works or when the user asks "how does this work?"
+---
+
+When explaining code, always include:
+
+1. **Start with an analogy**: Compare the code to something from everyday life
+2. **Draw a diagram**: Use ASCII art to show flow or structure
+3. **Walk through the code**: Explain step-by-step what happens
+```
+
+The `description` field is the most important part — Claude uses it to decide when to load the skill automatically. Make it specific and include phrases users would naturally say.
+
+### Where skills live
+
+| Location | Path | Scope |
+|---|---|---|
+| Personal | `~/.claude/skills/<name>/SKILL.md` | All your projects |
+| Project | `.claude/skills/<name>/SKILL.md` | This project only |
+| Enterprise | Managed settings | All org users |
+
+When names conflict, personal takes precedence over project.
+
+### Invoking skills
+
+- **Automatically**: Claude reads all skill descriptions at startup and decides when to apply them based on what you're asking.
+- **Manually**: Type `/skill-name` to invoke directly, with optional arguments: `/fix-issue 42`.
+
+### Key frontmatter options
+
+```yaml
+---
+name: deploy
+description: Deploy the application to production
+disable-model-invocation: true   # Only YOU can trigger this, not Claude
+context: fork                    # Run in an isolated subagent context
+allowed-tools: Bash(git *)       # Tools Claude can use without asking
 ---
 ```
 
-Claude reads all installed skill descriptions and automatically applies the relevant ones based on what you're asking. You never invoke a skill with a slash command — it just activates silently in the background.
+| Field | What it controls |
+|---|---|
+| `disable-model-invocation: true` | Prevents Claude from auto-triggering the skill. Use for side-effect actions like deploy, commit, or send-message. |
+| `user-invocable: false` | Hides the skill from the `/` menu. Use for background knowledge Claude should apply silently. |
+| `context: fork` | Runs the skill in an isolated subagent — no access to conversation history. Good for research or one-shot tasks. |
+| `allowed-tools` | Tools the skill can use without per-call permission prompts. |
+| `argument-hint` | Hint shown in autocomplete, e.g. `[issue-number]`. |
+
+### Passing arguments
+
+Use `$ARGUMENTS` in skill content — it's replaced with whatever follows the skill name when invoked:
+
+```yaml
+---
+name: fix-issue
+description: Fix a GitHub issue by number
+disable-model-invocation: true
+---
+
+Fix GitHub issue $ARGUMENTS following our coding standards.
+Read the issue, implement the fix, write tests, and commit.
+```
+
+Running `/fix-issue 123` sends Claude "Fix GitHub issue 123 following our coding standards..."
+
+For positional arguments, use `$0`, `$1`, `$2`:
+
+```yaml
+Migrate the $0 component from $1 to $2.
+```
+
+`/migrate-component SearchBar React Vue` → Claude sees `Migrate the SearchBar component from React to Vue.`
+
+### Supporting files
+
+Skills can include additional files alongside `SKILL.md` — templates, examples, scripts:
+
+```
+my-skill/
+├── SKILL.md
+├── examples.md
+└── scripts/
+    └── validate.sh
+```
+
+Reference them from `SKILL.md` so Claude knows when to load them. Keep `SKILL.md` under 500 lines and move detailed reference material into separate files.
+
+For example:
+
+```markdown
+## Additional resources
+
+- For usage examples, see [examples.md](examples.md)
+
+Run `scripts/validate.sh` after making changes.
+```
+
+Claude won't load `examples.md` on every invocation — it reads the reference in `SKILL.md` and decides whether to fetch it based on what the task requires.
+
+### Popular skills and how to install them
+
+Skills are distributed as **plugins** through marketplaces. The official Anthropic marketplace is available by default — browse it by running `/plugin` and opening the **Discover** tab.
+
+Some commonly used plugins from the official marketplace:
+
+| Plugin | What it adds |
+|---|---|
+| `commit-commands` | Git commit, push, and PR creation workflows |
+| `pr-review-toolkit` | Specialized agents for reviewing pull requests |
+| `github` / `gitlab` | MCP-backed access to issues, PRs, and repos |
+| `linear` / `atlassian` | Connect Claude to your project management tools |
+| `pyright-lsp` / `typescript-lsp` | Real-time type errors and code navigation for Python / TypeScript |
+| `agent-sdk-dev` | Reference material for building with the Claude Agent SDK |
+
+**Installing a plugin:**
+
+```shell
+/plugin install commit-commands@claude-plugins-official
+```
+
+Or use the interactive UI: run `/plugin`, go to **Discover**, select a plugin, and choose an installation scope:
+
+- **User** — available across all your projects (default)
+- **Project** — shared with your whole team via `.claude/settings.json`
+- **Local** — just this project, not committed
+
+After installing, run `/reload-plugins` to activate without restarting. Plugin skills are namespaced, so `commit-commands` shows up as `/commit-commands:commit`.
+
+**Adding third-party marketplaces:**
+
+The demo marketplace from Anthropic's GitHub has additional example plugins:
+
+```shell
+/plugin marketplace add anthropics/claude-code
+```
+
+Any GitHub repo, Git URL, or local path can be a marketplace — useful for sharing team-specific skills across projects.
+
+> Only install plugins from sources you trust. Plugins can execute arbitrary code on your machine.
 
 ---
 
@@ -223,72 +347,6 @@ Claude decides when to call the MCP server and does it invisibly. You don't need
 
 ---
 
-## Custom Commands
-
-Custom commands are personal slash commands you define as Markdown files in `~/.claude/commands/`. Each file becomes a `/command-name` you can invoke directly in the prompt.
-
-When you type `/commit`, Claude loads `~/.claude/commands/commit.md` and executes the prompt inside it. Great for repetitive tasks:
-
-- `/commit` — generate a conventional commit message
-- `/review` — run a structured code review checklist
-- `/deploy` — walk through your deployment steps
-- `/standup` — summarize recent git activity into a standup update
-
-Commands can include frontmatter to restrict which tools Claude is allowed to use, and can embed live shell output with `!` backtick syntax (e.g. `` !`git status` `` injects the current git status into the prompt at run time).
-
-### Example: `standup.md`
-
-Here's what `~/.claude/commands/standup.md` might look like:
-
-```markdown
----
-description: Summarize recent git activity as a standup update
-allowed-tools: Bash(git log:*), Bash(git diff:*)
----
-
-## Context
-
-- Recent commits by me: !`git log --oneline --author="$(git config user.name)" --since="yesterday"`
-- Current branch: !`git branch --show-current`
-- Files changed: !`git diff --stat HEAD~5`
-
-## Your task
-
-Based on the git activity above, write a short standup update in this format:
-
-**Yesterday:** What I worked on (based on commits)
-**Today:** What I plan to continue or finish next
-**Blockers:** None (unless you see signs of something unresolved)
-
-Keep it concise — 3 bullet points max per section. Write in first person.
-```
-
-When you type `/standup`, Claude runs the embedded `git log` and `git diff` commands live, then uses the real output to write your standup. No manual copy-pasting.
-
-### Skills vs. Commands — quick comparison
-
-| | Commands | Skills |
-|---|---|---|
-| Invoked by | You (`/command-name`) | Claude (automatically) |
-| File | `commands/my-command.md` | `skills/my-skill/SKILL.md` |
-| Lives in | Plugin or `~/.claude/commands/` | Plugin only |
-| Use for | Repetitive tasks you trigger | Domain knowledge Claude applies silently |
-
-**Choose a command when:**
-
-- You consciously trigger the workflow (e.g. "generate my commit message now")
-- The task is tied to a specific moment — before a commit, before a deploy, at standup time
-- You want to control exactly when it runs
-
-**Choose a skill when:**
-
-- You want Claude to apply it automatically, every time, without asking
-- It's domain knowledge or a coding standard (e.g. "always use FastAPI patterns when writing Python APIs")
-- Forgetting to invoke it would quietly hurt quality
-
-> Rule of thumb: if you'd have to remember to ask for it, make it a command. If you'd want it silently enforced every time, make it a skill.
-
----
 
 ## Memory — Remembering Across Sessions
 
