@@ -1,6 +1,6 @@
 ---
 created_at: "2026-03-12T04:00:00+00:00"
-updated_at: "2026-03-12T04:00:00+00:00"
+updated_at: "2026-03-13T04:00:00+00:00"
 summary: A practical guide to Claude Code — covering modes, slash commands, CLAUDE.md, MCP, skills, memory, and more.
 tags: Claude Code, AI Tools, Productivity, Developer Tools
 title: Claude Code Essentials — What You Need to Know
